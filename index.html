@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>极速文件分享</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 上传界面 -->
+        <div id="uploadSection">
+            <h1>📤 快速文件分享</h1>
+            <div class="drop-zone" id="dropZone">
+                <div class="icon">⬆️</div>
+                <div class="text">点击选择文件 或 拖放文件到这里</div>
+                <input type="file" id="fileInput">
+            </div>
+            <div class="file-info hidden" id="fileInfo">
+                <span id="fileName"></span>
+                <span id="fileSize"></span>
+            </div>
+            <button class="btn hidden" id="generateBtn">生成分享链接</button>
+        </div>
+
+        <!-- 分享界面 -->
+        <div id="shareSection" class="hidden">
+            <h2>✅ 文件已准备就绪</h2>
+            <div class="share-box">
+                <input type="text" id="shareLink" readonly>
+                <div class="btn-group">
+                    <button class="btn" onclick="copyLink()">复制链接</button>
+                    <button class="btn" onclick="newShare()">新分享</button>
+                </div>
+                <p class="notice">此链接将在页面关闭后失效</p>
+            </div>
+        </div>
+
+        <!-- 下载界面 -->
+        <div id="downloadSection" class="hidden">
+            <h1>📥 文件接收</h1>
+            <div class="download-box">
+                <div id="downloadInfo">
+                    <span class="filename" id="dlFileName"></span>
+                    <span class="filesize" id="dlFileSize"></span>
+                </div>
+                <a class="btn" id="downloadLink">立即下载</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 页面元素
+        const uploadSection = document.getElementById('uploadSection');
+        const shareSection = document.getElementById('shareSection');
+        const downloadSection = document.getElementById('downloadSection');
+        const fileInput = document.getElementById('fileInput');
+        const generateBtn = document.getElementById('generateBtn');
+
+        // 全局变量
+        let currentFile = null;
+        const MAX_SIZE = 2 * 1024 * 1024; // 2MB限制
+
+        // 初始化事件监听
+        function init() {
+            // 文件选择处理
+            fileInput.addEventListener('change', handleFileSelect);
+            
+            // 拖放处理
+            const dropZone = document.getElementById('dropZone');
+            dropZone.addEventListener('dragover', handleDragOver);
+            dropZone.addEventListener('drop', handleDrop);
+            
+            // 生成按钮
+            generateBtn.addEventListener('click', generateShareLink);
+            
+            // 页面加载检查
+            checkUrlParams();
+        }
+
+        // 处理文件选择
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            if (file.size > MAX_SIZE) {
+                alert('文件大小超过2MB限制，请使用小文件分享');
+                resetUI();
+                return;
+            }
+            
+            currentFile = file;
+            showFileInfo(file);
+        }
+
+        // 显示文件信息
+        function showFileInfo(file) {
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatSize(file.size);
+            document.getElementById('fileInfo').classList.remove('hidden');
+            generateBtn.classList.remove('hidden');
+        }
+
+        // 生成分享链接
+        async function generateShareLink() {
+            if (!currentFile) return;
+            
+            const reader = new FileReader();
+            reader.onload = () => {
+                const base64Data = reader.result;
+                const shareUrl = createShareUrl(currentFile.name, base64Data);
+                
+                uploadSection.classList.add('hidden');
+                shareSection.classList.remove('hidden');
+                document.getElementById('shareLink').value = shareUrl;
+            };
+            reader.readAsDataURL(currentFile);
+        }
+
+        // 创建分享URL
+        function createShareUrl(filename, data) {
+            const params = new URLSearchParams();
+            params.set('file', filename);
+            params.set('data', data.split(',')[1]); // 移除data:前缀
+            return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+        }
+
+        // 复制链接
+        function copyLink() {
+            const input = document.getElementById('shareLink');
+            input.select();
+            document.execCommand('copy');
+            alert('链接已复制到剪贴板！');
+        }
+
+        // 新分享
+        function newShare() {
+            window.location.href = window.location.origin + window.location.pathname;
+        }
+
+        // 检查URL参数
+        function checkUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            const fileData = params.get('data');
+            
+            if (fileData) {
+                handleDownload(params.get('file'), fileData);
+            }
+        }
+
+        // 处理下载
+        function handleDownload(filename, base64Data) {
+            const byteString = atob(base64Data);
+            const arrayBuffer = new ArrayBuffer(byteString.length);
+            const uintArray = new Uint8Array(arrayBuffer);
+            
+            for (let i = 0; i < byteString.length; i++) {
+                uintArray[i] = byteString.charCodeAt(i);
+            }
+            
+            const blob = new Blob([uintArray], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            
+            uploadSection.classList.add('hidden');
+            shareSection.classList.add('hidden');
+            downloadSection.classList.remove('hidden');
+            
+            document.getElementById('dlFileName').textContent = decodeURIComponent(filename);
+            document.getElementById('dlFileSize').textContent = formatSize(blob.size);
+            document.getElementById('downloadLink').href = url;
+            document.getElementById('downloadLink').download = decodeURIComponent(filename);
+        }
+
+        // 拖放处理
+        function handleDragOver(e) {
+            e.preventDefault();
+            document.getElementById('dropZone').classList.add('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            document.getElementById('dropZone').classList.remove('dragover');
+            
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                fileInput.files = e.dataTransfer.files;
+                fileInput.dispatchEvent(new Event('change'));
+            }
+        }
+
+        // 重置界面
+        function resetUI() {
+            fileInput.value = '';
+            currentFile = null;
+            document.getElementById('fileInfo').classList.add('hidden');
+            generateBtn.classList.add('hidden');
+        }
+
+        // 格式化文件大小
+        function formatSize(bytes) {
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let size = bytes;
+            let unitIndex = 0;
+            
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
+            }
+            
+            return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+        }
+
+        // 初始化
+        init();
+    </script>
+</body>
+</html>
